@@ -1,0 +1,528 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Simulare Banca Paralela MPI</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #080c14;
+    --surface: #0e1520;
+    --surface2: #141d2e;
+    --border: rgba(99,179,237,0.12);
+    --border2: rgba(99,179,237,0.22);
+    --accent: #3b82f6;
+    --accent2: #60a5fa;
+    --green: #10b981;
+    --red: #ef4444;
+    --amber: #f59e0b;
+    --text: #e2e8f0;
+    --text2: #94a3b8;
+    --text3: #475569;
+    --mono: 'Space Mono', monospace;
+    --sans: 'DM Sans', sans-serif;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    font-size: 14px;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* ── Background animat ── */
+  .bg-canvas {
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    overflow: hidden;
+  }
+
+  .grid-lines {
+    position: absolute;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(59,130,246,0.04) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(59,130,246,0.04) 1px, transparent 1px);
+    background-size: 48px 48px;
+    animation: grid-drift 20s linear infinite;
+  }
+
+  @keyframes grid-drift {
+    from { transform: translateY(0); }
+    to   { transform: translateY(48px); }
+  }
+
+  .orb {
+    position: absolute;
+    border-radius: 50%;
+    filter: blur(80px);
+    opacity: 0.18;
+    animation: orb-pulse 8s ease-in-out infinite alternate;
+  }
+  .orb1 { width: 500px; height: 500px; background: #1e40af; top: -150px; left: -150px; animation-delay: 0s; }
+  .orb2 { width: 400px; height: 400px; background: #065f46; bottom: -100px; right: -100px; animation-delay: 3s; }
+  .orb3 { width: 300px; height: 300px; background: #7c3aed; top: 40%; left: 40%; animation-delay: 6s; }
+
+  @keyframes orb-pulse {
+    from { opacity: 0.12; transform: scale(1); }
+    to   { opacity: 0.22; transform: scale(1.1); }
+  }
+
+  /* ── Layout ── */
+  .page {
+    position: relative;
+    z-index: 1;
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 2rem 1.5rem 4rem;
+  }
+
+  /* ── Header ── */
+  .header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    margin-bottom: 2rem;
+    padding-bottom: 1.5rem;
+    border-bottom: 1px solid var(--border);
+    animation: fadeDown 0.6s ease both;
+  }
+
+  .header-left { display: flex; align-items: center; gap: 16px; }
+
+  .logo {
+    width: 48px; height: 48px;
+    background: linear-gradient(135deg, #1e40af, #3b82f6);
+    border-radius: 12px;
+    display: flex; align-items: center; justify-content: center;
+    font-family: var(--mono);
+    font-size: 13px;
+    font-weight: 700;
+    color: #fff;
+    letter-spacing: -0.5px;
+    flex-shrink: 0;
+  }
+
+  .header-title { font-size: 20px; font-weight: 600; line-height: 1.2; }
+  .header-sub { font-size: 12px; color: var(--text2); margin-top: 3px; font-family: var(--mono); }
+
+  .header-badges { display: flex; flex-direction: column; gap: 6px; align-items: flex-end; }
+
+  .badge {
+    font-size: 11px; font-weight: 500; font-family: var(--mono);
+    padding: 3px 10px; border-radius: 20px;
+    border: 1px solid;
+    white-space: nowrap;
+  }
+  .badge-blue  { color: #93c5fd; border-color: rgba(59,130,246,0.3); background: rgba(59,130,246,0.08); }
+  .badge-green { color: #6ee7b7; border-color: rgba(16,185,129,0.3); background: rgba(16,185,129,0.08); }
+  .badge-red   { color: #fca5a5; border-color: rgba(239,68,68,0.3);  background: rgba(239,68,68,0.08); }
+  .badge-amber { color: #fcd34d; border-color: rgba(245,158,11,0.3); background: rgba(245,158,11,0.08); }
+
+  /* ── MPI Flow ── */
+  .mpi-flow {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 1.25rem 1.5rem;
+    margin-bottom: 1.5rem;
+    animation: fadeDown 0.6s 0.1s ease both;
+  }
+
+  .mpi-flow-label {
+    font-size: 10px; font-weight: 600; letter-spacing: 0.1em;
+    color: var(--text3); text-transform: uppercase; font-family: var(--mono);
+    margin-bottom: 1rem;
+  }
+
+  .mpi-steps {
+    display: flex; align-items: center; flex-wrap: wrap; gap: 6px;
+  }
+
+  .mpi-step {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 6px 12px;
+    font-size: 12px; font-family: var(--mono);
+    color: var(--text2);
+    display: flex; align-items: center; gap: 6px;
+    transition: border-color 0.2s, color 0.2s;
+  }
+  .mpi-step:hover { border-color: var(--border2); color: var(--text); }
+
+  .mpi-tag {
+    font-size: 10px; padding: 2px 6px; border-radius: 4px;
+    font-weight: 700; letter-spacing: 0.03em;
+  }
+  .tag-blue  { background: rgba(59,130,246,0.15); color: #93c5fd; }
+  .tag-green { background: rgba(16,185,129,0.15); color: #6ee7b7; }
+  .tag-amber { background: rgba(245,158,11,0.15);  color: #fcd34d; }
+
+  .mpi-arrow { color: var(--text3); font-size: 14px; }
+
+  /* ── Metrics ── */
+  .metrics {
+    display: grid; grid-template-columns: repeat(4, minmax(0,1fr));
+    gap: 12px; margin-bottom: 1.5rem;
+    animation: fadeDown 0.6s 0.2s ease both;
+  }
+
+  .metric {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1rem 1.25rem;
+  }
+  .metric-label { font-size: 11px; color: var(--text3); font-family: var(--mono); margin-bottom: 6px; }
+  .metric-value { font-size: 26px; font-weight: 600; line-height: 1; }
+  .metric-sub   { font-size: 11px; color: var(--text2); margin-top: 4px; }
+
+  /* ── Section label ── */
+  .section-label {
+    font-size: 10px; font-weight: 600; letter-spacing: 0.1em;
+    color: var(--text3); text-transform: uppercase; font-family: var(--mono);
+    margin-bottom: 10px;
+  }
+
+  /* ── Ghisee grid ── */
+  .ghisee-grid {
+    display: grid; grid-template-columns: repeat(2, minmax(0,1fr));
+    gap: 12px; margin-bottom: 1.5rem;
+    animation: fadeDown 0.6s 0.3s ease both;
+  }
+
+  .ghiseu-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    overflow: hidden;
+  }
+
+  .ghiseu-header {
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; gap: 10px;
+  }
+
+  .ghiseu-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+
+  .ghiseu-title { font-size: 13px; font-weight: 600; font-family: var(--mono); }
+  .ghiseu-rank  { font-size: 11px; color: var(--text3); font-family: var(--mono); }
+
+  .client-row {
+    padding: 10px 14px;
+    display: flex; align-items: center; gap: 10px;
+    border-bottom: 1px solid var(--border);
+    transition: background 0.15s;
+  }
+  .client-row:last-child { border-bottom: none; }
+  .client-row:hover { background: var(--surface2); }
+
+  .avatar {
+    width: 32px; height: 32px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11px; font-weight: 700; font-family: var(--mono);
+    flex-shrink: 0;
+  }
+
+  .client-info { flex: 1; min-width: 0; }
+  .client-name { font-size: 13px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .client-detail { font-size: 11px; color: var(--text3); font-family: var(--mono); margin-top: 2px; }
+  .client-frauda { color: #fca5a5; font-weight: 600; }
+
+  .sold-block { text-align: right; flex-shrink: 0; }
+  .sold-init  { font-size: 11px; color: var(--text3); font-family: var(--mono); }
+  .sold-final { font-size: 13px; font-weight: 600; font-family: var(--mono); }
+  .sold-green { color: var(--green); }
+  .sold-red   { color: var(--red); }
+  .sold-diff  { font-size: 10px; opacity: 0.7; }
+
+  /* ── Fraude ── */
+  .fraude-section {
+    background: rgba(239,68,68,0.04);
+    border: 1px solid rgba(239,68,68,0.2);
+    border-radius: 14px;
+    overflow: hidden;
+    margin-bottom: 1.5rem;
+    animation: fadeDown 0.6s 0.4s ease both;
+  }
+
+  .fraude-header {
+    background: rgba(239,68,68,0.08);
+    border-bottom: 1px solid rgba(239,68,68,0.15);
+    padding: 10px 14px;
+    font-size: 12px; font-weight: 600; font-family: var(--mono);
+    color: #fca5a5;
+    display: flex; align-items: center; gap: 8px;
+  }
+
+  .fraude-dot { width: 6px; height: 6px; border-radius: 50%; background: #ef4444; animation: blink 1.5s ease-in-out infinite; }
+  @keyframes blink { 0%,100% { opacity: 1; } 50% { opacity: 0.2; } }
+
+  .frauda-row {
+    padding: 10px 14px;
+    font-size: 12px; font-family: var(--mono);
+    border-bottom: 1px solid rgba(239,68,68,0.1);
+    color: var(--text2);
+    line-height: 1.6;
+  }
+  .frauda-row:last-child { border-bottom: none; }
+  .frauda-name { color: #fca5a5; font-weight: 700; }
+  .frauda-amount { color: var(--amber); font-weight: 700; }
+
+  /* ── Total bar ── */
+  .total-bar {
+    background: var(--surface);
+    border: 1px solid rgba(16,185,129,0.2);
+    border-radius: 14px;
+    padding: 1.25rem 1.5rem;
+    display: flex; align-items: center; justify-content: space-between;
+    animation: fadeDown 0.6s 0.5s ease both;
+  }
+
+  .total-label { font-size: 12px; color: var(--text2); font-family: var(--mono); }
+  .total-sub   { font-size: 11px; color: var(--text3); margin-top: 4px; }
+  .total-value { font-size: 28px; font-weight: 700; font-family: var(--mono); color: var(--green); }
+
+  /* ── Footer ── */
+  .footer {
+    margin-top: 2rem;
+    text-align: center;
+    font-size: 11px;
+    color: var(--text3);
+    font-family: var(--mono);
+    animation: fadeDown 0.6s 0.6s ease both;
+  }
+
+  @keyframes fadeDown {
+    from { opacity: 0; transform: translateY(-12px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  /* ── Responsive ── */
+  @media (max-width: 700px) {
+    .metrics { grid-template-columns: repeat(2, minmax(0,1fr)); }
+    .ghisee-grid { grid-template-columns: 1fr; }
+    .header { flex-direction: column; gap: 12px; }
+    .header-badges { align-items: flex-start; flex-direction: row; flex-wrap: wrap; }
+  }
+</style>
+</head>
+<body>
+
+<div class="bg-canvas">
+  <div class="grid-lines"></div>
+  <div class="orb orb1"></div>
+  <div class="orb orb2"></div>
+  <div class="orb orb3"></div>
+</div>
+
+<div class="page">
+
+  <!-- Header -->
+  <div class="header">
+    <div class="header-left">
+      <div class="logo">MPI</div>
+      <div>
+        <div class="header-title">Simulare Banca Paralela</div>
+        <div class="header-sub">Student: Rosneanu Alexandru Vasile &nbsp;|&nbsp; IFR 3 — 2026 &nbsp;|&nbsp; PPCD</div>
+      </div>
+    </div>
+    <div class="header-badges">
+      <span class="badge badge-blue">mpiexec -n 5 python simulare_banca_paralela.py</span>
+      <div style="display:flex;gap:6px;margin-top:2px">
+        <span class="badge badge-green">1 banca + 4 ghisee</span>
+        <span class="badge badge-amber">8 clienti</span>
+        <span class="badge badge-red" id="fraude-badge">3 fraude</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- MPI Flow -->
+  <div class="mpi-flow">
+    <div class="mpi-flow-label">Flux de executie MPI</div>
+    <div class="mpi-steps">
+      <div class="mpi-step">rank 0 <span class="mpi-tag tag-blue">banca centrala</span></div>
+      <div class="mpi-arrow">&#8594;</div>
+      <div class="mpi-step">bcast <span class="mpi-tag tag-amber">dobanda 0.5%</span></div>
+      <div class="mpi-arrow">&#8594;</div>
+      <div class="mpi-step">scatter <span class="mpi-tag tag-amber">clienti &#x2192; ghisee</span></div>
+      <div class="mpi-arrow">&#8594;</div>
+      <div class="mpi-step">procesare locala <span class="mpi-tag tag-green">paralel</span></div>
+      <div class="mpi-arrow">&#8594;</div>
+      <div class="mpi-step">gather <span class="mpi-tag tag-amber">rezultate &#x2192; rank 0</span></div>
+      <div class="mpi-arrow">&#8594;</div>
+      <div class="mpi-step">reduce <span class="mpi-tag tag-blue">MPI.SUM</span></div>
+      <div class="mpi-arrow">&#8594;</div>
+      <div class="mpi-step">raport final</div>
+    </div>
+  </div>
+
+  <!-- Metrics -->
+  <div class="metrics">
+    <div class="metric">
+      <div class="metric-label">rata dobanzii</div>
+      <div class="metric-value" style="color:#60a5fa">0.5%</div>
+      <div class="metric-sub">zilnica / bcast</div>
+    </div>
+    <div class="metric">
+      <div class="metric-label">ghisee active</div>
+      <div class="metric-value" style="color:#a78bfa">4</div>
+      <div class="metric-sub">rank 1 — 4</div>
+    </div>
+    <div class="metric">
+      <div class="metric-label">tranzactii</div>
+      <div class="metric-value" style="color:#6ee7b7">16</div>
+      <div class="metric-sub">procesate paralel</div>
+    </div>
+    <div class="metric">
+      <div class="metric-label">fraude</div>
+      <div class="metric-value" style="color:#fca5a5" id="fraude-count">0</div>
+      <div class="metric-sub">detectate / refuzate</div>
+    </div>
+  </div>
+
+  <!-- Ghisee -->
+  <div class="section-label">Ghisee si clienti procesati</div>
+  <div class="ghisee-grid" id="ghisee-grid"></div>
+
+  <!-- Fraude -->
+  <div class="fraude-section" id="fraude-section" style="display:none">
+    <div class="fraude-header">
+      <div class="fraude-dot"></div>
+      Alerte de frauda detectate — retrageri refuzate
+    </div>
+    <div id="fraude-list"></div>
+  </div>
+
+  <!-- Total -->
+  <div class="total-bar">
+    <div>
+      <div class="total-label">Total depozite in banca</div>
+      <div class="total-sub">suma soldurilor finale — calculat prin reduce(MPI.SUM)</div>
+    </div>
+    <div class="total-value" id="total-val">...</div>
+  </div>
+
+  <div class="footer">
+    Programare Paralela si Calculatoare Distribuite &nbsp;&#8226;&nbsp; IFR 3 — 2026 &nbsp;&#8226;&nbsp; mpi4py
+  </div>
+
+</div>
+
+<script>
+const RATA = 0.5;
+const CLIENTI = [
+  {id:0, nume:"Popescu Ion",     sold:1000, trz:[["DEP",200],["RET",150]], ghiseu:1},
+  {id:1, nume:"Ionescu Maria",   sold:500,  trz:[["DEP",100],["RET",600]], ghiseu:2},
+  {id:2, nume:"Georgescu Mihai", sold:2000, trz:[["DEP",500],["RET",300]], ghiseu:3},
+  {id:3, nume:"Dumitrescu Ana",  sold:750,  trz:[["DEP",50], ["RET",800]], ghiseu:4},
+  {id:4, nume:"Constantin Radu", sold:300,  trz:[["DEP",700],["RET",100]], ghiseu:1},
+  {id:5, nume:"Popa Elena",      sold:1500, trz:[["DEP",200],["RET",400]], ghiseu:2},
+  {id:6, nume:"Stan Florin",     sold:800,  trz:[["DEP",300],["RET",250]], ghiseu:3},
+  {id:7, nume:"Matei Cristina",  sold:420,  trz:[["DEP",80], ["RET",500]], ghiseu:4},
+];
+
+const GHISEU_COLORS = [
+  { dot:"#3b82f6", avatarBg:"rgba(59,130,246,0.15)", avatarTxt:"#93c5fd" },
+  { dot:"#10b981", avatarBg:"rgba(16,185,129,0.15)", avatarTxt:"#6ee7b7" },
+  { dot:"#f59e0b", avatarBg:"rgba(245,158,11,0.15)", avatarTxt:"#fcd34d" },
+  { dot:"#a78bfa", avatarBg:"rgba(167,139,250,0.15)", avatarTxt:"#c4b5fd" },
+];
+
+function initiale(n){ return n.split(" ").map(p=>p[0]).join("").slice(0,2).toUpperCase(); }
+
+function proceseaza(c) {
+  let sold = c.sold;
+  const dob = Math.round(sold * RATA / 100 * 100) / 100;
+  sold += dob;
+  const alerte = [];
+  for (const [tip, suma] of c.trz) {
+    if (tip === "DEP") { sold += suma; }
+    else if (tip === "RET") {
+      if (suma > sold) { alerte.push({ client: c.nume, suma, sold: Math.round(sold*100)/100 }); }
+      else { sold -= suma; }
+    }
+  }
+  return { sold_final: Math.round(sold*100)/100, alerte, dob };
+}
+
+const ghiseeMap = {1:[],2:[],3:[],4:[]};
+const fraude = [];
+let total = 0;
+
+CLIENTI.forEach(c => {
+  const rez = proceseaza(c);
+  ghiseeMap[c.ghiseu].push({...c, ...rez});
+  fraude.push(...rez.alerte);
+  total += rez.sold_final;
+});
+
+// Render ghisee
+const grid = document.getElementById("ghisee-grid");
+[1,2,3,4].forEach(g => {
+  const col = GHISEU_COLORS[g-1];
+  const clienti = ghiseeMap[g];
+  const card = document.createElement("div");
+  card.className = "ghiseu-card";
+
+  let html = `<div class="ghiseu-header">
+    <div class="ghiseu-dot" style="background:${col.dot}"></div>
+    <div>
+      <div class="ghiseu-title">Ghiseu ${g}</div>
+    </div>
+    <span class="badge badge-blue" style="margin-left:auto;font-size:10px">rank ${g}</span>
+    <span style="margin-left:6px;font-size:11px;color:#475569;font-family:'Space Mono',monospace">${clienti.length} clienti</span>
+  </div>`;
+
+  clienti.forEach(c => {
+    const diff = Math.round((c.sold_final - c.sold)*100)/100;
+    const cls  = diff > 0 ? "sold-green" : diff < 0 ? "sold-red" : "";
+    const sign = diff >= 0 ? "+" : "";
+    const hasFrauda = fraude.some(f => f.client === c.nume);
+    const tLabel = c.trz.map(t => (t[0]==="DEP"?"+":"-")+t[1]).join(" / ") + " RON";
+
+    html += `<div class="client-row">
+      <div class="avatar" style="background:${col.avatarBg};color:${col.avatarTxt}">${initiale(c.nume)}</div>
+      <div class="client-info">
+        <div class="client-name">${c.nume}</div>
+        <div class="client-detail">${tLabel}${hasFrauda ? ' &nbsp;<span class="client-frauda">frauda detectata</span>' : ''}</div>
+      </div>
+      <div class="sold-block">
+        <div class="sold-init">${c.sold} RON</div>
+        <div class="sold-final ${cls}">${c.sold_final} RON <span class="sold-diff">(${sign}${diff})</span></div>
+      </div>
+    </div>`;
+  });
+
+  card.innerHTML = html;
+  grid.appendChild(card);
+});
+
+// Render fraude
+const fraudeList = document.getElementById("fraude-list");
+if (fraude.length > 0) {
+  document.getElementById("fraude-section").style.display = "block";
+  document.getElementById("fraude-count").textContent = fraude.length;
+  fraude.forEach(f => {
+    const row = document.createElement("div");
+    row.className = "frauda-row";
+    row.innerHTML = `<span class="frauda-name">${f.client}</span> &mdash; retragere de <span class="frauda-amount">${f.suma} RON</span> refuzata &mdash; sold disponibil: ${f.sold} RON &nbsp;<span class="badge badge-red" style="font-size:10px">refuzat</span>`;
+    fraudeList.appendChild(row);
+  });
+} else {
+  document.getElementById("fraude-count").textContent = "0";
+}
+
+document.getElementById("total-val").textContent = Math.round(total*100)/100 + " RON";
+</script>
+</body>
+</html>
